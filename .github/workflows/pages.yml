@@ -1,6 +1,12 @@
 name: Deploy Data Factory
+run-name: 'Deploy Data Factory · ${{ inputs.deployment_id || github.sha }}'
 on:
   workflow_dispatch:
+    inputs:
+      deployment_id:
+        description: 'Optional identifier used by the publication script'
+        required: false
+        type: string
 permissions:
   contents: read
   pages: write

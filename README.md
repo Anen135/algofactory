@@ -79,6 +79,18 @@ npm run test:e2e
 
 ## Статическая публикация
 
+Публикация через ваш авторизованный GitHub CLI (`gh`) и PowerShell 7:
+
+```powershell
+# Один раз: создать публичный репозиторий, настроить Pages и опубликовать.
+pwsh -File ./scripts/publish-pages.ps1 -Owner Anen135 -Repository algofactory -CreateRepository
+
+# Повторная публикация после commit изменений:
+pwsh -File ./scripts/publish-pages.ps1 -Owner Anen135 -Repository algofactory
+```
+
+Скрипт требует чистое рабочее дерево, запускает typecheck/tests/build, отправляет текущую ветку в origin, включает Pages с GitHub Actions, запускает нужный workflow, ждёт его завершения и проверяет HTTP-ответ сайта. Токен берётся из `gh auth login`, не сохраняется в проекте. Существующий чужой origin не заменяется, force-push не используется. `-NoWait` запускает публикацию без ожидания, `-SkipChecks` пропускает локальные проверки (workflow всё равно запускает тесты и сборку). Без `-Owner` используется текущий пользователь `gh`.
+
 `npm run build` создаёт `dist/`. Загрузите содержимое этой папки на любой статический хостинг. Не открывайте `index.html` через `file://`: используйте HTTP-сервер.
 
 Для GitHub Pages включите **Settings → Pages → Source: GitHub Actions**, затем вручную запустите включённый workflow **Deploy Data Factory**. Он собирает и публикует `dist/`. `base: './'` позволяет размещать игру в подпапке репозитория; маршрутизатор и настройка fallback не нужны. Workflow сам не запускает публикацию при каждом commit.
