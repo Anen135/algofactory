@@ -1,6 +1,11 @@
 name: Deploy Data Factory
 run-name: 'Deploy Data Factory · ${{ inputs.deployment_id || github.sha }}'
 on:
+  # Bootstrap workflow registration in a new repository. Ordinary source pushes
+  # still publish only when the CLI script dispatches this workflow explicitly.
+  push:
+    paths:
+      - '.github/workflows/pages.yml'
   workflow_dispatch:
     inputs:
       deployment_id:
