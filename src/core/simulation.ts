@@ -38,10 +38,14 @@ export class Simulation {
     this.enqueue(() => {
       const snapshot = this.snapshots.get(machine.id)!; snapshot.status = 'processing';
       const connected = new Set(this.incoming.get(machine.id)!.map(c => c.to.port));
-      const result = this.definitions.get(machine.type).execute({ input: this.input, inputs: structuredClone(snapshot.inputs), config: machine.config, connected, memory: {} });
+      const definition = this.definitions.get(machine.type);
+      const result = definition.execute({ input: this.input, inputs: structuredClone(snapshot.inputs), config: machine.config, connected, memory: {} });
       snapshot.state = result.state ?? {}; snapshot.outputs = result.outputs; this.operations++;
       if (machine.type === 'output') this.output.push(...snapshot.inputs.in);
-      for (const [port, values] of Object.entries(result.outputs)) {
+      const outputs = definition.ports.filter(p => p.direction === 'output');
+      for (const key of Object.keys(result.outputs)) if (!outputs.some(p => p.id === key)) throw new Error(`${definition.name}: неизвестный выход ${key}.`);
+      for (const { id: port } of outputs) {
+        const values = result.outputs[port] ?? [];
         if (!values.every(v => isDataValue(v))) throw new Error(`${this.definitions.get(machine.type).name}: получено недопустимое значение.`);
         for (const value of values) for (const edge of this.outgoing.get(machine.id)!.filter(c => c.from.port === port)) this.schedulePacket(edge, value);
       }
@@ -68,8 +72,8 @@ export class Simulation {
   step(): SimulationEvent {
     if (this.done) return { kind: this.error ? 'error' : 'done', tick: this.ticks, message: this.error };
     try {
-      if (this.ticks >= this.maxTicks) throw new Error('Превышен лимит шагов симуляции.');
       if (this.head >= this.actions.length) { this.done = true; return { kind: 'done', tick: this.ticks }; }
+      if (this.ticks >= this.maxTicks) throw new Error('Превышен лимит шагов симуляции.');
       const action = this.actions[this.head++]; this.ticks++;
       const event = { ...action(), tick: this.ticks };
       if (this.head > 2048) { this.actions = this.actions.slice(this.head); this.head = 0; }

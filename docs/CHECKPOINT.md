@@ -1,41 +1,38 @@
-# Checkpoint — 2026-09-20
+# Checkpoint — 2026-09-20 — MVP завершён
 
-## Current state
+## Состояние
 
-Data Factory MVP has a working TypeScript/Vite/Phaser 4 project and a Phaser renderer/UI implementation in progress.
+Завершены оставшиеся задачи предыдущего checkpoint: браузерная проверка, исправления регрессий, polish и все пять запрошенных документов. Ничего не требуется пересоздавать.
 
-Implemented and tested:
+Реализованы независимая симуляция, 12 машин, 10 уровней, Phaser-редактор, drag/drop/порты, камера, анимированные пакеты, RUN/Pause/Step/скорости, живой инспектор, тесты, tutorial, карта, рекорды, autosave, JSON import/export, undo/redo и Graph → IR → Code View.
 
-- strict TypeScript project bootstrap with Vite, Phaser 4.2.1 and Vitest;
-- Phaser-independent simulation core with typed values, machine registry, graph validation, deterministic event stepping, packets and execution limits;
-- Source, Output, Constant, Arithmetic, Comparator, Split, Join, Stack, Queue, Branch, Filter and Memory machines;
-- ten data-driven levels with visible and hidden tests;
-- graph serialization/deserialization and validation;
-- level runner, autosave/progress persistence, edit/run/pause/step/speed state, undo/redo and JSON import/export;
-- intermediate representation and Python/JavaScript Code View generators;
-- Phaser factory field with grid, camera pan/zoom, node dragging, port connections, connection arrows and packet animation;
-- dark industrial HTML/CSS UI with machine palette, mission panel, inspector, tests, console, tutorial, level map, settings/help dialogs and responsive desktop layout.
+## Проверки
 
-## Verification at checkpoint
+- `npm run typecheck`: успешно.
+- `npm test`: 70 успешных тестов, включая настоящий запуск Python для всех уровней.
+- `npm run build`: успешно, `dist/` готов для статического размещения.
+- `npm run test:e2e` с `PLAYWRIGHT_CHANNEL=msedge`: 5 успешных браузерных сценариев, включая прохождение всех 10 уровней.
+- `npm run test:build` с тем же channel: production работает через HTTP под `/algofactory/`, без внешних ресурсов и ошибок браузера.
 
-- `npm run typecheck` passed;
-- `npm test` passed: 53 tests;
-- `npm run build` passed. Vite reports the expected Phaser bundle size warning (Phaser chunk is about 1.4 MB minified).
+Подробности: `docs/QA.md`. Размеры: 1366×768, 1920×1080 и 1100×700.
 
-## Known follow-up work
+## Репозиторий
 
-1. Start Vite and perform a browser smoke test of the Phaser canvas, drag/drop, connections, RUN, STEP, inspector and level map.
-2. Fix any browser-only issues found during that smoke test.
-3. Add the remaining requested documentation files: `README.md`, `docs/ARCHITECTURE.md`, `docs/GAME_DESIGN.md`, `docs/ADDING_MACHINE.md`, `docs/ADDING_LEVEL.md`.
-4. Review and polish edge cases in renderer lifecycle and runtime display.
+Основной checkpoint был сохранён в обычном `.git`: `e5c8437`. Старый резервный репозиторий `.checkpoint-repo/` сохранён и игнорируется; для дальнейшей работы используйте основной Git. Текущий итоговый commit смотрите через `git log -1`.
 
-## Resume commands
+В этом Windows-окружении запись в `.git` может требовать запуска команды вне sandbox и разового `git -c safe.directory=C:/projects/web/algofactory ...` из-за владельца каталога. Не создавайте дополнительные вложенные репозитории и не меняйте глобальные настройки ради этого.
+
+## Запуск и навигация
 
 ```bash
 npm install
 npm run dev
-npm test
-npm run build
 ```
 
-The current graph/editor model is in `src/state`, simulation core in `src/core`, Phaser code in `src/renderer`, UI in `src/ui`, level data in `src/content/levels`, and code generation in `src/code`.
+`README.md` описывает управление, тесты и публикацию. Архитектура — `docs/ARCHITECTURE.md`, игровой дизайн — `docs/GAME_DESIGN.md`, расширение — `docs/ADDING_MACHINE.md` и `docs/ADDING_LEVEL.md`.
+
+## Сознательные границы MVP
+
+Нет управляющих циклов/рекурсии/мобильного редактора; графовые циклы отклоняются. Memory выполняет пакетные записи, затем чтения, и сбрасывается между тестами. JavaScript экспортирует скалярные фабрики; Python поддерживает текущие машины. Дополнительные Python-тесты пропускаются без установленного Python 3. Phaser bundle даёт предупреждение Vite о размере, но сборка работает.
+
+Публикация не выполнялась. Для неё подготовлен ручной GitHub Actions workflow `.github/workflows/pages.yml`; его можно запустить после размещения репозитория на GitHub и включения Pages.

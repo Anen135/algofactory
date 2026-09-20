@@ -1,5 +1,5 @@
-import type { DataValue, MachineDefinition, Port, PortType } from './types';
-import { equal, number, pairs } from './values';
+import type { DataValue, Machine, MachineDefinition, Port, PortType } from './types';
+import { equal, isDataValue, number, pairs } from './values';
 const input = (id: string, types: PortType[] = ['any'], required = true, multiple = false): Port => ({ id, label: id.toUpperCase(), direction: 'input', types, required, multiple });
 const output = (id = 'out', types: PortType[] = ['any']): Port => ({ id, label: id.toUpperCase(), direction: 'output', types });
 const out = (values: DataValue[]) => ({ outputs: { out: values } });
@@ -51,3 +51,15 @@ export class MachineRegistry {
   all(): MachineDefinition[] { return [...this.definitions.values()]; }
 }
 export const registry = new MachineRegistry();
+
+/** Validate configuration at every boundary: editor, import and execution. */
+export function configurationError(machine: Machine, definitions = registry): string | undefined {
+  const definition = definitions.get(machine.type);
+  for (const key of Object.keys(definition.defaults)) {
+    if (!Object.hasOwn(machine.config, key) || !isDataValue(machine.config[key])) return `${definition.name}: некорректный параметр ${key}.`;
+  }
+  for (const field of definition.fields) {
+    if (field.kind === 'select' && !field.options?.includes(String(machine.config[field.key]))) return `${definition.name}: выберите допустимое значение «${field.label}».`;
+  }
+  return undefined;
+}

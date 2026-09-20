@@ -6,11 +6,21 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
-    "test:watch": "vitest",
+    "test": "vitest run src",
+    "test:watch": "vitest src",
+    "test:e2e": "playwright test",
+    "test:build": "node scripts/verify-build.mjs",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host 127.0.0.1"
   },
-  "dependencies": { "phaser": "^4.2.1" },
-  "devDependencies": { "typescript": "^5.9.3", "vite": "^7.1.0", "vitest": "^3.2.4", "@playwright/test": "^1.55.0" }
+  "dependencies": {
+    "phaser": "^4.2.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.55.0",
+    "@types/node": "^24.13.6",
+    "typescript": "^5.9.3",
+    "vite": "^7.1.0",
+    "vitest": "^3.2.4"
+  }
 }

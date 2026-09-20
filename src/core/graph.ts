@@ -1,4 +1,4 @@
-import { registry, type MachineRegistry } from './machines';
+import { configurationError, registry, type MachineRegistry } from './machines';
 import type { Connection, FactoryGraph, Machine, PortType } from './types';
 import { dataType, isDataValue } from './values';
 export const cloneGraph = (graph: FactoryGraph): FactoryGraph => structuredClone(graph);
@@ -37,7 +37,7 @@ export function validateGraph(graph: FactoryGraph, definitions: MachineRegistry 
   if (new Set(graph.machines.map(m => m.id)).size !== graph.machines.length) errors.push('ID машин должны быть уникальны.');
   if (new Set(graph.connections.map(c => c.id)).size !== graph.connections.length) errors.push('ID соединений должны быть уникальны.');
   for (const m of graph.machines) {
-    try { const d = definitions.get(m.type); for (const p of d.ports.filter(p => p.direction === 'input' && p.required)) if (!graph.connections.some(c => c.to.machine === m.id && c.to.port === p.id)) errors.push(`У машины ${d.name} (${m.id}) не подключён вход ${p.label}.`); }
+    try { const d = definitions.get(m.type); const configError = configurationError(m, definitions); if (configError) errors.push(configError); for (const p of d.ports.filter(p => p.direction === 'input' && p.required)) if (!graph.connections.some(c => c.to.machine === m.id && c.to.port === p.id)) errors.push(`У машины ${d.name} (${m.id}) не подключён вход ${p.label}.`); }
     catch (e) { errors.push((e as Error).message); }
   }
   for (const edge of graph.connections) { try { const error = connectionError(graph, edge, definitions); if (error) errors.push(error); } catch (e) { errors.push((e as Error).message); } }
@@ -64,6 +64,7 @@ export function deserializeGraph(text: string): FactoryGraph {
     if (!c || typeof c.id !== 'string' || !validEnd(c.from) || !validEnd(c.to)) throw new Error('Повреждены данные соединения.');
   }
   const graph = g as unknown as FactoryGraph;
+  for (const m of graph.machines) { const error = configurationError(m); if (error) throw new Error(error); }
   if (new Set(graph.machines.map(m => m.id)).size !== graph.machines.length || new Set(graph.connections.map(c => c.id)).size !== graph.connections.length) throw new Error('Повторяющиеся ID в сохранении.');
   for (const c of graph.connections) { const error = connectionError(graph, c); if (error) throw new Error(error); }
   topologicalOrder(graph);

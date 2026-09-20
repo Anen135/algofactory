@@ -6,7 +6,7 @@ import { colorHex, escape } from './helpers';
 export function palette(state: GameState): string {
   const captions: Record<string, string> = { source: 'Входные данные', output: 'Результат', arithmetic: 'Арифметика', comparator: 'Сравнение', constant: 'Значение', split: 'Разделить поток', join: 'Собрать поток', stack: 'Последний → первый', queue: 'Первый → первый', branch: 'Условная развилка', filter: 'Отбор элементов', memory: 'Переменная' };
   return '<div class="palette-section">БЛОКИ ВЫЧИСЛЕНИЙ</div>' + state.level.availableMachines.map(type => {
-    const d = registry.get(type); return `<button class="machine-card" data-machine="${type}" draggable="${state.mode === 'EDIT'}" title="${escape(d.description)}"><span class="machine-icon" style="--machine-color:${colorHex(d.color)}">${d.icon}</span><span><strong>${d.name}</strong><small>${escape(captions[type])}</small></span><i>⠿</i></button>`;
+    const d = registry.get(type); return `<button class="machine-card" data-machine="${type}" draggable="${state.mode === 'EDIT'}" title="${escape(d.description)}"><span class="machine-icon" style="--machine-color:${colorHex(d.color)}">${d.icon}</span><span><strong>${d.name}</strong><small>${escape(captions[type] ?? d.description)}</small></span><i>⠿</i></button>`;
   }).join('') + '<div class="unlock-note"><span>◇</span> Новые машины открываются<br>в следующих заданиях.</div><button class="text-button" data-action="hint">Нужна подсказка? ↗</button>';
 }
 export function inspector(s: GameState): string {

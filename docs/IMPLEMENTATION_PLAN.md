@@ -1,5 +1,9 @@
 # Data Factory — implementation plan
 
+## Статус на 2026-09-20
+
+Этапы 1–12 завершены. Ядро, редактор, 10 уровней, отладка, сохранения, история команд, Code View и документация реализованы. Final QA: typecheck, 70 тестов, production build, 5 браузерных сценариев и проверка dist из подпапки пройдены. Подробности и ограничения — в `docs/QA.md` и `docs/CHECKPOINT.md`.
+
 ## Исходное состояние
 Пустой каталог. Стек: TypeScript strict, Phaser 4, Vite, Vitest, HTML/CSS, без React.
 

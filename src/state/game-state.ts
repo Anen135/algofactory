@@ -1,7 +1,7 @@
 import { levels } from '../content/levels';
 import { cloneGraph, connectionError, deserializeGraph, topologicalOrder } from '../core/graph';
 import { runLevel } from '../core/level-runner';
-import { registry } from '../core/machines';
+import { configurationError, registry } from '../core/machines';
 import { Simulation } from '../core/simulation';
 import { emptyGraph, grid, type Connection, type DataValue, type FactoryGraph, type Level, type LevelResult, type SimulationEvent } from '../core/types';
 import { Persistence } from './storage';
@@ -16,6 +16,7 @@ export class GameState {
   paused = false;
   speed = 1;
   simulation?: Simulation;
+  lastEvent?: SimulationEvent;
   result?: LevelResult;
   sample = 0;
   message = 'Начните с SOURCE. Перетащите машину на поле.';
@@ -50,7 +51,15 @@ export class GameState {
   }
   private nextId(prefix: string): string { let i = 1; const ids = new Set([...this.graph.machines, ...this.graph.connections].map(x => x.id)); while (ids.has(`${prefix}${i}`)) i++; return `${prefix}${i}`; }
   moveMachine(id: string, x: number, y: number): void { this.commit('Переместить машину', g => { const m = g.machines.find(m => m.id === id); if (m) { m.x = grid.snap(x); m.y = grid.snap(y); } }); }
-  configure(id: string, key: string, value: DataValue): void { this.commit('Изменить параметр', g => { const m = g.machines.find(m => m.id === id); if (m) m.config[key] = value; }); }
+  configure(id: string, key: string, value: DataValue): void {
+    this.commit('Изменить параметр', g => {
+      const m = g.machines.find(m => m.id === id); if (!m) return;
+      if (!registry.get(m.type).fields.some(f => f.key === key)) throw new Error('Неизвестный параметр машины.');
+      m.config[key] = value;
+      const error = configurationError(m); if (error) throw new Error(error);
+      for (const edge of g.connections) { const error = connectionError(g, edge); if (error) throw new Error(`${error} Удалите несовместимую связь перед изменением параметра.`); }
+    });
+  }
   connect(from: Connection['from'], to: Connection['to']): void {
     const edge: Connection = { id: this.nextId('c'), from, to };
     this.commit('Создать соединение', g => { const error = connectionError(g, edge); if (error) throw new Error(error); g.connections.push(edge); topologicalOrder(g); });
@@ -68,23 +77,26 @@ export class GameState {
   loadLevel(id: string): void {
     const level = levels.find(l => l.id === id); if (!level) return;
     this.save(); this.level = level; this.graph = this.persistence.loadGraph(id) ?? emptyGraph(); this.persistence.currentLevel = id;
-    this.mode = 'EDIT'; this.paused = false; this.simulation = undefined; this.result = undefined; this.selected = undefined; this.selectedConnection = undefined; this.sample = 0; this.undoStack = []; this.redoStack = []; this.log = []; this.message = level.hint; this.notify({ kind: 'level' });
+    this.mode = 'EDIT'; this.paused = false; this.simulation = undefined; this.lastEvent = undefined; this.result = undefined; this.selected = undefined; this.selectedConnection = undefined; this.sample = 0; this.undoStack = []; this.redoStack = []; this.log = []; this.message = this.persistence.warning ?? level.hint; this.notify({ kind: 'level' });
   }
   edit(): void { this.mode = 'EDIT'; this.paused = false; this.elapsed = 0; this.notify({ kind: 'runtime' }); }
   private start(paused: boolean): boolean {
     try {
       this.simulation = new Simulation(this.graph, this.level.tests.filter(t => !t.hidden)[this.sample].input);
-      this.mode = 'RUN'; this.paused = paused; this.elapsed = 0; this.result = undefined; this.report('Поток запущен. Выберите машину, чтобы увидеть её состояние.'); this.notify({ kind: 'runtime' }); return true;
+      this.mode = 'RUN'; this.paused = paused; this.elapsed = 0; this.result = undefined; this.lastEvent = undefined; this.log = []; this.report('Поток запущен. Выберите машину, чтобы увидеть её состояние.'); this.notify({ kind: 'runtime' }); return true;
     } catch (e) { this.report((e as Error).message); return false; }
   }
   run(): void { if (this.mode === 'RUN' && this.simulation && !this.simulation.done) { this.paused = !this.paused; this.notify({ kind: 'runtime' }); } else this.start(false); }
   step(): void { if (!this.simulation || this.mode === 'EDIT' || this.simulation.done) { if (!this.start(true)) return; } this.paused = true; this.executeStep(); }
   private executeStep(): void {
     const event = this.simulation!.step();
-    if (event.kind === 'process') this.log = [...this.log.slice(-79), `#${event.tick} ${registry.get(this.graph.machines.find(m => m.id === event.machineId)!.type).name}: обработка`];
+    this.lastEvent = event;
+    const labels = { process: 'Обработка', emit: 'Создание пакета', transfer: 'Передача пакета', close: 'Конец потока', done: 'Готово', error: 'Ошибка' };
+    const machine = this.graph.machines.find(m => m.id === event.machineId);
+    this.log = [...this.log.slice(-79), `#${event.tick} ${labels[event.kind]}${machine ? ` · ${registry.get(machine.type).name} (${machine.id})` : ''}${event.packet ? ` · ${JSON.stringify(event.packet.value)}` : ''}`];
     this.notify({ kind: 'runtime', event });
+    if (event.kind === 'done' || event.kind === 'error') this.checkTests();
     if (event.kind === 'error') this.report(event.message!);
-    if (event.kind === 'done') this.checkTests();
   }
   advance(delta: number): void {
     if (this.mode !== 'RUN' || this.paused || !this.simulation || this.simulation.done) return;

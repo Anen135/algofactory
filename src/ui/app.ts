@@ -33,7 +33,7 @@ export class App {
       if (target.id === 'language') { this.language = target.value; this.renderTab(); }
       if (target.id === 'sound') { this.sound.enabled = target.checked; this.sound.play(true); }
       if (target.dataset.config && this.state.selected) {
-        try { this.state.configure(this.state.selected, target.dataset.config, target.dataset.kind === 'value' ? parseValue(target.value) : target.value); }
+        try { this.state.configure(this.state.selected, target.dataset.config, target.dataset.kind === 'value' ? parseValue(target.value) : target.value); $('#inspector-content').innerHTML = inspector(this.state); }
         catch (e) { this.state.report((e as Error).message); target.classList.add('invalid'); }
       }
     });
@@ -66,7 +66,7 @@ export class App {
     actions[action]?.();
   }
   private changed(change: StateChange): void {
-    if (change.kind === 'runtime') { if (!this.pending) { this.pending = true; setTimeout(() => { this.pending = false; this.renderControls(); $('#inspector-content').innerHTML = inspector(this.state); if (this.tab === 'console') this.renderTab(); }, 80); } return; }
+    if (change.kind === 'runtime') { if (!change.event) { this.renderTab(); this.renderControls(); } if (!this.pending) { this.pending = true; setTimeout(() => { this.pending = false; this.renderControls(); $('#inspector-content').innerHTML = inspector(this.state); if (this.tab === 'console') this.renderTab(); }, 80); } return; }
     if (change.kind === 'results') this.sound.play(!!this.state.result?.passed);
     if (change.kind === 'selection') { $('#inspector-content').innerHTML = inspector(this.state); return; }
     if (change.kind === 'message') { this.renderStatus(); return; }
@@ -76,7 +76,7 @@ export class App {
   private renderLevel(): void {
     const s = this.state, index = levels.indexOf(s.level);
     $('#level-name').textContent = s.level.name; $('#level-topic').textContent = s.level.topic; $('#level-number').textContent = String(index + 1).padStart(2, '0');
-    $('#progress-label').innerHTML = `<span class="mint">${Object.keys(s.persistence.progress()).length}</span> / 10 пройдено`; $('#machine-count').textContent = `${s.level.availableMachines.length} доступно`;
+    $('#progress-label').innerHTML = `<span class="mint">${levels.filter(level => s.persistence.progress()[level.id]?.completed).length}</span> / ${levels.length} пройдено`; $('#machine-count').textContent = `${s.level.availableMachines.length} доступно`;
     $('#empty-state').hidden = !!s.graph.machines.length; $('#graph-count').textContent = `${s.graph.machines.length} машин · ${s.graph.connections.length} связей`;
     const tutorial = tutorialState(s); $('#tutorial').hidden = !tutorial;
     if (tutorial) $('#tutorial').innerHTML = `<span class="tutorial-icon">${tutorial.current === tutorial.count ? '✓' : '↳'}</span><div><small>ПЕРВЫЕ ШАГИ <span>${Math.min(tutorial.current + 1, tutorial.count)} / ${tutorial.count}</span></small><p>${escape(tutorial.text)}</p></div>`;
@@ -87,6 +87,9 @@ export class App {
     $('#run-btn').textContent = running ? s.paused ? '▶ Продолжить' : 'Ⅱ Пауза' : '▶ RUN';
     $<HTMLButtonElement>('#edit-btn').disabled = s.mode === 'EDIT'; $<HTMLButtonElement>('#undo-btn').disabled = !s.canUndo; $<HTMLButtonElement>('#redo-btn').disabled = !s.canRedo; $<HTMLButtonElement>('#check-btn').disabled = running;
     $('#stats-line').textContent = `${s.simulation?.operations ?? 0} операций · ${s.simulation?.ticks ?? 0} тиков`;
+    const eventLabels = { process: 'Обработка', emit: 'Создание пакета', transfer: 'Передача пакета', close: 'Конец потока', done: 'Готово', error: 'Ошибка' };
+    if (s.mode === 'RUN' && s.lastEvent) $('#stats-line').textContent += ` · ${eventLabels[s.lastEvent.kind]}`;
+    document.querySelectorAll<HTMLButtonElement>('[data-machine], [data-action="clear"], [data-action="import"]').forEach(button => { button.disabled = s.mode === 'RUN'; });
     const sample = document.querySelector<HTMLSelectElement>('#sample'); if (sample) sample.disabled = s.mode === 'RUN';
   }
   private renderTab(): void {
@@ -99,6 +102,6 @@ export class App {
     }
     $('#tab-content').innerHTML = testsPanel(s);
   }
-  private renderStatus(): void { $('#status-message').textContent = this.state.message; $('#save-status').innerHTML = this.state.persistence.warning ? 'СОХРАНЕНИЕ НЕДОСТУПНО' : 'LOCAL AUTOSAVE <i class="status-dot"></i>'; }
+  private renderStatus(): void { $('#status-message').textContent = this.state.message; $('#status-message').title = this.state.message; $('#save-status').innerHTML = this.state.persistence.warning ? 'СОХРАНЕНИЕ НЕДОСТУПНО' : 'LOCAL AUTOSAVE <i class="status-dot"></i>'; }
   private openModal(title: string, content: string): void { $('#modal-title').textContent = title; $('#modal-content').innerHTML = content; $<HTMLDialogElement>('#modal').showModal(); }
 }

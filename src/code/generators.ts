@@ -18,14 +18,19 @@ function scalarCode(program: Program, language: 'Python' | 'JavaScript'): string
         // Python modulo has a different sign rule; emulate JS remainder explicitly.
         return python && op === '%' ? `remainder(${input('a')}, ${input('b')})` : `${input('a')} ${op} ${input('b')}`;
       },
-      comparator: () => { const op = String(n.parameters.operation); return !python && ['==', '!='].includes(op) ? `JSON.stringify(${input('a')}) ${op === '==' ? '===' : '!=='} JSON.stringify(${input('b')})` : `${input('a')} ${op} ${input('b')}`; },
+      comparator: () => {
+        const op = String(n.parameters.operation);
+        if (['==', '!='].includes(op)) return python ? `${op === '!=' ? 'not ' : ''}equal(${input('a')}, ${input('b')})` : `JSON.stringify(${input('a')}) ${op === '==' ? '===' : '!=='} JSON.stringify(${input('b')})`;
+        return `${input('a')} ${op} ${input('b')}`;
+      },
     };
     lines.push(`    ${python ? '' : 'const '}${n.id} = ${emitters[n.operation]()}${python ? '' : ';'}`);
   }
   lines.push(`    return ${program.outputs.length === 1 ? program.outputs[0] : `[${program.outputs.join(', ')}]`}${python ? '' : ';'}`);
   if (!python) lines.push('}');
   const modulo = python && program.nodes.some(n => n.operation === 'arithmetic' && n.parameters.operation === '%');
-  return (modulo ? 'from math import fmod as remainder\n\n' : '') + lines.join('\n');
+  const equality = python && program.nodes.some(n => n.operation === 'comparator' && ['==', '!='].includes(String(n.parameters.operation)));
+  return (modulo ? 'from math import fmod as remainder\n\n' : '') + (equality ? `${pythonEquality}\n\n` : '') + lines.join('\n');
 }
 const pythonEmitters: Record<string, Emitter> = {
   source: n => [`${n.id}_out = [input_value]`],
@@ -41,14 +46,16 @@ const pythonEmitters: Record<string, Emitter> = {
   memory: (n, i) => [`${n.id}_current = (${i('write')} or [${pyValue(n.parameters.initial)}])[-1]`, `${n.id}_out = ${n.inputs.read ? `[${n.id}_current for _ in ${i('read')}]` : `list(${i('write')}) or [${n.id}_current]`}`],
   output: (n, i) => [`${n.id}_out = ${i('in')}`],
 };
-const helpers = `from math import fmod as remainder
-
-def equal(a, b):
+const pythonEquality = `def equal(a, b):
     if isinstance(a, bool) != isinstance(b, bool):
         return False
     if isinstance(a, list) and isinstance(b, list):
         return len(a) == len(b) and all(equal(x, y) for x, y in zip(a, b))
-    return a == b
+    return a == b`;
+
+const helpers = `from math import fmod as remainder
+
+${pythonEquality}
 
 def pair(a, b):
     if not a or not b:
