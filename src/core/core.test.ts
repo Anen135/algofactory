@@ -1,0 +1,42 @@
+import { describe, expect, test } from 'vitest';
+import { levels } from '../content/levels';
+import { deserializeGraph, serializeGraph, validateGraph } from './graph';
+import { arithmetic, comparisons, registry } from './machines';
+import { runLevel } from './level-runner';
+import { Simulation } from './simulation';
+import { FactoryBuilder, solution } from './test-factories';
+import type { DataValue, ExecutionContext } from './types';
+const execute = (type: string, inputs: Record<string, DataValue[]>, config: ExecutionContext['config'] = {}) => registry.get(type).execute({ input: 0, inputs, config: { ...registry.get(type).defaults, ...config }, connected: new Set(Object.keys(inputs)), memory: {} });
+describe('10 playable levels', () => {
+  levels.forEach((level, i) => test(`${i + 1}. ${level.name}: visible + hidden tests`, () => { const result = runLevel(solution(i), level); expect(result.tests.filter(t => !t.passed)).toEqual([]); expect(result.passed).toBe(true); }));
+});
+describe('machines', () => {
+  test.each([['+', -2, 2, 0], ['-', 2, 3, -1], ['*', -2, 4, -8], ['/', 10, 2, 5], ['%', 7, 2, 1]] as const)('math %s', (op, a, b, expected) => expect(arithmetic[op](a, b)).toBe(expected));
+  test('division and modulo zero rejected', () => { expect(() => arithmetic['/'](1, 0)).toThrow('ноль'); expect(() => arithmetic['%'](1, 0)).toThrow('ноль'); });
+  test.each(['==', '!=', '>', '<', '>=', '<='])('comparator %s returns boolean', op => expect(typeof comparisons[op](2, 2)).toBe('boolean'));
+  test('deep equality', () => { expect(comparisons['==']([1, 2], [1, 2])).toBe(true); expect(comparisons['=='](1, '1')).toBe(false); });
+  test('split handles Unicode code points and empty input', () => { expect(execute('split', { in: ['🚀A'] }).outputs.out).toEqual(['🚀', 'A']); expect(execute('split', { in: ['', []] }).outputs.out).toEqual([]); });
+  test('join preserves empty string and array', () => { expect(execute('join', { in: [] }).outputs.out).toEqual(['']); expect(execute('join', { in: [] }, { mode: 'array' }).outputs.out).toEqual([[]]); });
+  test('stack LIFO and queue FIFO do not mutate inputs', () => { const values = [1, 2, 3]; expect(execute('stack', { in: values }).outputs.out).toEqual([3, 2, 1]); expect(execute('queue', { in: values }).outputs.out).toEqual(values); expect(values).toEqual([1, 2, 3]); });
+  test('branch pairs individual conditions', () => expect(execute('branch', { data: [1, 2, 3], condition: [true, false, true] }).outputs).toEqual({ true: [1, 3], false: [2] }));
+  test('filter broadcasts constant condition', () => expect(execute('filter', { data: [1, 2, 3], condition: [true] }).outputs.out).toEqual([1, 2, 3]));
+  test('mismatched stream lengths fail', () => expect(() => execute('arithmetic', { a: [1, 2], b: [1, 2, 3] })).toThrow('длину'));
+  test('memory write then read', () => { const result = execute('memory', { write: [14, 20], read: [true, true] }); expect(result.outputs.out).toEqual([20, 20]); expect(result.state?.current).toBe(20); });
+  test('memory initial read', () => expect(execute('memory', { read: [true] }, { initial: 6 }).outputs.out).toEqual([6]));
+  test('inactive triggered constant emits nothing', () => expect(execute('constant', { trigger: [] }).outputs.out).toEqual([]));
+});
+describe('graph, packets and safety', () => {
+  test('serialization roundtrip', () => expect(deserializeGraph(serializeGraph(solution(8)))).toEqual(solution(8)));
+  test('malformed saves rejected', () => { expect(() => deserializeGraph('{}')).toThrow(); expect(() => deserializeGraph('{"version":1,"machines":[null],"connections":[]}')).toThrow(); });
+  test('missing input explained', () => { const g = solution(1); g.connections.splice(1, 1); expect(validateGraph(g).join()).toContain('вход B'); });
+  test('incompatible connections', () => { const g = solution(1); g.machines.find(m => m.id === 'c')!.config.value = true; expect(validateGraph(g).join()).toContain('Несовместимые'); });
+  test('output to output rejected', () => { const g = solution(0); g.connections[0].to = { machine: 's', port: 'out' }; expect(validateGraph(g).length).toBeGreaterThan(0); });
+  test('cycles rejected', () => { const b = new FactoryBuilder().add('s', 'source').add('a', 'queue').add('b', 'queue').add('o', 'output').wire('s', 'o').wire('a', 'b').wire('b', 'a'); expect(() => new Simulation(b.graph, 0)).toThrow('цикл'); });
+  test('output unreachable rejected', () => { const g = solution(0); g.connections = []; expect(validateGraph(g).join()).toContain('не получает'); });
+  test('step equals instant, one event per tick', () => { const a = new Simulation(solution(6), 'ABC'); const ticks: number[] = []; while (!a.done) { const e = a.step(); if (e.kind !== 'done') ticks.push(e.tick); } expect(ticks).toEqual(Array.from({ length: ticks.length }, (_, i) => i + 1)); expect(a.output).toEqual(new Simulation(solution(6), 'ABC').run().output); });
+  test('multiple packets carry connection and state', () => { const s = new Simulation(solution(6), 'ABC'); const packets = []; while (!s.done) { const e = s.step(); if (e.kind === 'transfer') packets.push(e.packet); } expect(packets.length).toBeGreaterThan(5); expect(packets.every(p => p?.currentConnection && p.state === 'delivered')).toBe(true); });
+  test('runtime types protect generic source', () => { const s = new Simulation(solution(1), 'BAD').run(); expect(s.error).toContain('ожидает number'); });
+  test('execution budget enforced', () => { const s = new Simulation(solution(6), 'ABCD', registry, 10).run(); expect(s.error).toContain('лимит'); });
+  test('wrong factory cannot pass only the visible example', () => { const g = solution(0); g.machines.push({ id: 'c', type: 'constant', x: 0, y: 0, config: { value: 42 } }); g.connections.push({ id: 'extra', from: { machine: 'c', port: 'out' }, to: { machine: 'o', port: 'in' } }); expect(runLevel(g, levels[0]).passed).toBe(false); });
+  test('configuration cannot return infinity', () => { const g = solution(1); g.machines.find(m => m.id === 'c')!.config.value = Number.MAX_VALUE; expect(new Simulation(g, 10).run().error).toContain('недопустимое'); });
+});
